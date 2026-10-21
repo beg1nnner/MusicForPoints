@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Музыка за баллы — панель</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f3f2f8; --panel: #ffffff; --fg: #1b1924; --muted: #66627a; --line: #dcd8e8;
+    --soft: #ebe9f5; --accent: #4458d4; --accent-fg: #ffffff;
+    --ok: #1d7a4a; --warn: #9a6200; --bad: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14121b; --panel: #1c1a25; --fg: #f1eff8; --muted: #a09bb5; --line: #2e2b3a;
+      --soft: #262333; --accent: #8fa8ff; --accent-fg: #14121b;
+      --ok: #6ad39a; --warn: #e8b45a; --bad: #ff8f8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size: 18px; font-weight: 650; margin: 0; }
+  h2 { font-size: 20px; font-weight: 650; margin: 0 0 16px; }
+  h3 { font-size: 15px; font-weight: 650; margin: 24px 0 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  a { color: var(--accent); }
+  code { background: var(--soft); padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 14px 24px;
+           background: var(--panel); border-bottom: 1px solid var(--line); }
+  #chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px;
+          background: var(--soft); font-size: 13px; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .chip.ok i { background: var(--ok); } .chip.warn i { background: var(--warn); } .chip.bad i { background: var(--bad); }
+  #detail { margin: 0; padding: 10px 24px; background: var(--soft); color: var(--bad); font-size: 14px; }
+
+  .shell { display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: calc(100vh - 62px); }
+  nav { padding: 16px 12px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+  nav button { text-align: left; background: none; border: 0; padding: 9px 12px; border-radius: 8px;
+               color: var(--muted); font: inherit; cursor: pointer; }
+  nav button:hover { color: var(--fg); }
+  nav button[aria-current="page"] { background: var(--soft); color: var(--fg); font-weight: 600; }
+  main { padding: 24px; padding-bottom: 110px; max-width: 1040px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .panel + .panel { margin-top: 16px; }
+  .muted { color: var(--muted); }
+
+  button.btn { font: inherit; color: inherit; background: var(--soft); border: 1px solid var(--line);
+               border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  button.btn:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* поля настроек */
+  .field { display: grid; gap: 6px; margin-bottom: 18px; max-width: 560px; }
+  .field > label { font-weight: 600; font-size: 14px; }
+  .field label.check { display: flex; gap: 10px; align-items: center; font-weight: 500; cursor: pointer; }
+  .field input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .help { color: var(--muted); font-size: 13px; }
+  .err { color: var(--bad); font-size: 13px; min-height: 0; }
+  .err:empty { display: none; }
+  input[type=text], input[type=password], input[type=number], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: inherit; font: inherit; }
+  textarea { resize: vertical; }
+  .inline { display: flex; gap: 12px; align-items: center; }
+  .inline input[type=range] { flex: 1; accent-color: var(--accent); }
+  .inline output { min-width: 3.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=color] { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--line);
+                      border-radius: 8px; background: var(--bg); cursor: pointer; }
+
+  /* плеер */
+  #now { display: flex; gap: 14px; align-items: center; }
+  #nowCover { width: 76px; height: 76px; border-radius: 8px; object-fit: cover; background: var(--soft); flex: none; }
+  #nowTitle { font-size: 18px; font-weight: 650; }
+  #nowBar { height: 4px; background: var(--soft); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  #nowBar div { height: 100%; width: 0; background: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  ol.list, ul.list { margin: 0; padding: 0; list-style: none; }
+  ol.list li, ul.list li { flex-wrap: wrap; display: flex; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+  ol.list li:first-child, ul.list li:first-child { border-top: 0; }
+  li .grow { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  li button { font: inherit; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+  li button:hover { color: var(--bad); background: var(--soft); }
+  li button.mini { border: 1px solid var(--line); font-size: 12px; padding: 2px 9px; color: var(--fg); background: var(--panel); }
+  li button.mini:hover { border-color: var(--bad); color: var(--bad); }
+  .form-inline { display: flex; gap: 8px; margin: 12px 0; }
+  .form-inline input { flex: 1; }
+  #testForm { display: flex; gap: 8px; margin-top: 12px; }
+  #testForm input { flex: 1; }
+  #log li { font-size: 13px; color: var(--muted); }
+  #log time { font-variant-numeric: tabular-nums; margin-right: 6px; }
+
+  /* оверлей */
+  .ovgrid { display: grid; grid-template-columns: minmax(280px, 1fr) auto; gap: 24px; align-items: start; }
+  .preview { position: sticky; top: 16px; }
+  .checker { overflow: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 10px;
+             background: repeating-conic-gradient(#8885 0 25%, #0000 0 50%) 0 0 / 20px 20px; }
+  iframe { display: block; border: 0; width: 700px; height: 460px; color-scheme: light; background: transparent; }
+  @media (max-width: 1280px) { .ovgrid { grid-template-columns: 1fr; } .preview { position: static; } }
+
+  /* панель сохранения и уведомления */
+  #savebar { position: fixed; left: 190px; right: 0; bottom: 0; display: flex; gap: 10px; align-items: center;
+             justify-content: flex-end; padding: 12px 24px; background: var(--panel); border-top: 1px solid var(--line); z-index: 5; }
+  #flash { position: fixed; right: 16px; top: 16px; display: grid; gap: 8px; z-index: 10; max-width: 380px; }
+  .toast { padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line);
+           border-left: 4px solid var(--accent); box-shadow: 0 6px 20px #0003; }
+  .toast.ok { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); } .toast.bad { border-left-color: var(--bad); }
+
+  @media (max-width: 760px) {
+    .shell { grid-template-columns: 1fr; }
+    nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    #savebar { left: 0; }
+    main { padding: 16px; padding-bottom: 110px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Музыка за баллы</h1>
+  <div id="chips"></div>
+</header>
+<p id="detail" hidden></p>
+
+<div class="shell">
+  <nav id="nav" aria-label="Разделы">
+    <button data-tab="player">Плеер</button>
+    <button data-tab="order">Заказы</button>
+    <button data-tab="blocklist">Чёрный список</button>
+    <button data-tab="overlay">Оверлей</button>
+    <button data-tab="connect">Подключения</button>
+  </nav>
+
+  <main>
+    <!-- ПЛЕЕР -->
+    <section id="tab-player" hidden>
+      <h2>Плеер</h2>
+      <div class="panel">
+        <div id="now">
+          <img id="nowCover" alt="">
+          <div style="min-width:0;flex:1">
+            <div id="nowTitle">Ничего не играет</div>
+            <div id="nowArtists" class="muted"></div>
+            <div id="nowBy" class="muted"></div>
+            <div id="nowBar"><div></div></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="skip">Пропустить</button>
+          <button class="btn" id="pause">Пауза</button>
+          <label for="vol" style="margin-left:12px">Громкость</label>
+          <input id="vol" type="range" min="0" max="100" style="width:180px;accent-color:var(--accent)">
+          <output id="volv">0</output>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn danger" id="blockNowTrack">Заблокировать трек</button>
+          <button class="btn danger" id="blockNowUser">Заблокировать зрителя</button>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:16px">
+        <div class="panel">
+          <h3>Очередь</h3>
+          <p id="queueEmpty" class="muted" style="margin:0">Очередь пуста. Добавьте трек ниже или дождитесь заказа зрителя.</p>
+          <ol id="queue" class="list"></ol>
+          <div class="row" style="margin-top:10px"><button class="btn danger" id="clear">Очистить очередь</button></div>
+          <form id="testForm">
+            <input type="text" id="testQuery" placeholder="Исполнитель - Название или ссылка" aria-label="Тестовый заказ">
+            <button class="btn primary" type="submit">Добавить</button>
+          </form>
+          <div class="help" style="margin-top:6px">Тестовый заказ идёт от имени «Тест» и не тратит баллы.</div>
+        </div>
+        <div class="panel">
+          <h3>Журнал</h3>
+          <p id="logEmpty" class="muted" style="margin:0">Здесь появятся заказы и отказы.</p>
+          <ul id="log" class="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЗАКАЗЫ -->
+    <section id="tab-order" hidden>
+      <h2>Заказы</h2>
+      <div class="panel"><div data-group="order"></div></div>
+    </section>
+
+    <!-- ЧЁРНЫЙ СПИСОК -->
+    <section id="tab-blocklist" hidden>
+      <h2>Чёрный список</h2>
+      <div class="grid2">
+        <div class="panel">
+          <h3>Зрители</h3>
+          <p class="help">Заказы заблокированных зрителей отклоняются, баллы возвращаются, а уведомления в OBS нет.
+            Укажите ник из адреса канала (twitch.tv/<b>ник</b>). Для кириллических имён нужен именно этот ник.</p>
+          <form id="blUserForm" class="form-inline">
+            <input type="text" id="blUserInput" placeholder="Ник зрителя" aria-label="Ник зрителя" autocomplete="off">
+            <button class="btn primary" type="submit">Заблокировать</button>
+          </form>
+          <p id="blUsersEmpty" class="muted" style="margin:0">Список пуст.</p>
+          <ul id="blUsers" class="list"></ul>
+        </div>
+        <div class="panel">
+          <h3>Треки</h3>
+          <p class="help">Блокируется конкретная версия трека. У песни могут быть другие версии (сингл, альбом, ремикс),
+            их можно добавить отдельно. Исполнителя целиком можно закрыть через «Запрещённые слова» на вкладке «Заказы».</p>
+          <form id="blTrackForm" class="form-inline">
+            <input type="text" id="blTrackInput" placeholder="Ссылка на трек или Исполнитель - Название" aria-label="Трек для блокировки" autocomplete="off">
+            <button class="btn primary" type="submit">Заблокировать</button>
+          </form>
+          <p id="blTracksEmpty" class="muted" style="margin:0">Список пуст.</p>
+          <ul id="blTracks" class="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ОВЕРЛЕЙ -->
+    <section id="tab-overlay" hidden>
+      <h2>Оверлей для OBS</h2>
+      <div class="ovgrid">
+        <div class="panel"><div data-group="overlay"></div></div>
+        <div class="preview">
+          <div class="checker"><iframe id="preview" src="/?preview=1" title="Предпросмотр оверлея"></iframe></div>
+          <p class="help" style="max-width:700px">Предпросмотр обновляется сразу, сохранять для этого не нужно.
+            В OBS добавьте источник «Браузер» с адресом <code id="obsUrl"></code> и размером 700×460.</p>
+          <div class="row">
+            <button class="btn" id="copyUrl">Скопировать адрес</button>
+            <button class="btn" id="testToast">Показать уведомление в OBS</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ПОДКЛЮЧЕНИЯ -->
+    <section id="tab-connect" hidden>
+      <h2>Подключения</h2>
+      <div class="panel">
+        <div data-group="connect"></div>
+        <h3>Как получить ключи</h3>
+        <p><b>Twitch.</b> На <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console/apps</a>
+          зарегистрируйте приложение с адресом перенаправления <code>http://localhost:4343/callback</code>
+          и типом клиента Confidential, затем скопируйте Client ID и создайте Client Secret.</p>
+        <p><b>Яндекс Музыка.</b> Войдите в Яндекс в браузере и откройте
+          <a href="https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d" target="_blank" rel="noopener">эту ссылку</a>.
+          В адресной строке после разрешения доступа будет <code>#access_token=…</code> — скопируйте то, что идёт после знака равенства и до <code>&amp;</code>.</p>
+        <h3>YouTube и Spotify</h3>
+        <p>Для заказов с YouTube нужны <code>yt-dlp</code> и <code>ffmpeg</code> (ставятся вместе с программой) и
+          <b>Deno</b> или Node.js (ставится отдельно, например <code>winget install DenoLand.Deno</code>, затем
+          перезапустите программу). Spotify ничего не требует: по ссылке программа находит тот же трек в Яндекс Музыке
+          или на YouTube.</p>
+        <div class="row"><button class="btn" id="ytCheck">Проверить YouTube</button></div>
+        <p id="ytResult" class="help" aria-live="polite"></p>
+        <h3>Аккаунт Twitch</h3>
+        <p class="muted">Сообщения в чат отправляются от имени этого аккаунта. «Войти заново» нужно, чтобы выдать
+          программе доступ к чату или сменить аккаунт. Окно подтверждения откроется в браузере.</p>
+        <div class="row">
+          <button class="btn" id="relogin">Войти в Twitch заново</button>
+          <button class="btn" id="chatTest">Отправить тестовое сообщение в чат</button>
+          <button class="btn danger" id="logout">Выйти из Twitch</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="savebar" hidden>
+  <span id="dirtyText" class="muted"></span>
+  <button class="btn" id="reset">Отменить</button>
+  <button class="btn primary" id="save">Сохранить</button>
+</div>
+<div id="flash" role="status" aria-live="polite"></div>
+
+<script>
+  const $ = (s, r = document) => r.querySelector(s);
+  const h = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v;
+      else if (v === true) n.setAttribute(k, '');
+      else if (v !== false && v != null) n.setAttribute(k, v);
+    }
+    for (const kid of kids.flat()) if (kid != null) n.append(kid);
+    return n;
+  };
+  const post = async (url, body = {}) => {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return r.json();
+  };
+  const flash = (text, kind = 'ok') => {
+    const t = h('div', { class: 'toast ' + kind }, text);
+    $('#flash').append(t);
+    setTimeout(() => t.remove(), kind === 'ok' ? 3500 : 8000);
+  };
+
+  /* ---------- вкладки ---------- */
+  const TABS = ['player', 'order', 'blocklist', 'overlay', 'connect'];
+  function showTab(tab) {
+    if (!TABS.includes(tab)) tab = 'player';
+    for (const t of TABS) $('#tab-' + t).hidden = t !== tab;
+    document.querySelectorAll('#nav button').forEach((b) =>
+      b.dataset.tab === tab ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+    history.replaceState(null, '', '#' + tab);
+    if (tab === 'overlay') sendPreview();
+    updateSaveBar();
+  }
+  document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  /* ---------- настройки ---------- */
+  let fields = [], byKey = {}, server = {}, secrets = {}, form = {};
+
+  const dirtyKeys = () => Object.keys(form).filter((k) => String(form[k]) !== String(server[k]));
+
+  function updateSaveBar() {
+    const n = dirtyKeys().length;
+    const settingsTab = ['order', 'overlay', 'connect'].some((t) => !$('#tab-' + t).hidden);
+    $('#savebar').hidden = !(n && settingsTab);
+    $('#dirtyText').textContent = 'Несохранённых изменений: ' + n;
+  }
+
+  function onChange(key) {
+    const err = $(`.field[data-key="${key}"] .err`);
+    if (err) err.textContent = '';
+    updateSaveBar();
+    if (key.startsWith('OV_')) sendPreview();
+  }
+
+  function fieldNode(f) {
+    const id = 'f-' + f.key;
+    const wrap = h('div', { class: 'field', 'data-key': f.key });
+    const set = (v) => { form[f.key] = v; onChange(f.key); };
+
+    if (f.type === 'bool') {
+      const cb = h('input', { type: 'checkbox', id });
+      cb.checked = !!form[f.key];
+      cb.addEventListener('change', () => set(cb.checked));
+      wrap.append(h('label', { class: 'check', for: id }, cb, f.label));
+    } else {
+      wrap.append(h('label', { for: id }, f.label));
+      let ctrl;
+      if (f.type === 'textarea') {
+        ctrl = h('textarea', { id, rows: 3 });
+        ctrl.value = form[f.key];
+        ctrl.addEventListener('input', () => set(ctrl.value));
+      } else if (f.type === 'select') {
+        ctrl = h('select', { id }, f.options.map((o) => h('option', { value: o.value }, o.label)));
+        ctrl.value = form[f.key];
+        ctrl.addEventListener('change', () => set(ctrl.value));
+      } else if (f.type === 'range') {
+        const input = h('input', { type: 'range', id, min: f.min, max: f.max, step: f.step || 1 });
+        const out = h('output', { for: id }, String(form[f.key]));
+        input.value = form[f.key];
+        input.addEventListener('input', () => { out.textContent = input.value; set(Number(input.value)); });
+        ctrl = h('div', { class: 'inline' }, input, out);
+      } else if (f.type === 'color') {
+        const input = h('input', { type: 'color', id });
+        const out = h('code', {}, form[f.key]);
+        input.value = form[f.key];
+        input.addEventListener('input', () => { out.textContent = input.value; set(input.value); });
+        ctrl = h('div', { class: 'inline' }, input, out);
+      } else {
+        const type = f.type === 'secret' ? 'password' : f.type === 'int' ? 'number' : 'text';
+        ctrl = h('input', { id, type, autocomplete: f.type === 'secret' ? 'new-password' : 'off',
+                            min: f.min, max: f.max });
+        ctrl.value = form[f.key];
+        if (f.type === 'secret')
+          ctrl.placeholder = secrets[f.key] ? 'Сохранено. Введите новое значение, чтобы заменить' : 'Не задано';
+        ctrl.addEventListener('input', () => set(ctrl.value));
+      }
+      wrap.append(ctrl);
+    }
+    if (f.help) wrap.append(h('div', { class: 'help' }, f.help));
+    wrap.append(h('div', { class: 'err', role: 'alert' }));
+    return wrap;
+  }
+
+  function renderForms() {
+    document.querySelectorAll('[data-group]').forEach((box) => {
+      box.replaceChildren();
+      let section = null;
+      for (const f of fields.filter((x) => x.group === box.dataset.group)) {
+        if (f.section && f.section !== section) { section = f.section; box.append(h('h3', {}, section)); }
+        box.append(fieldNode(f));
+      }
+    });
+  }
+
+  async function loadSettings() {
+    const r = await (await fetch('/api/settings')).json();
+    fields = r.fields; secrets = r.secrets; server = r.values; form = { ...server };
+    byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
+    renderForms();
+    updateSaveBar();
+    sendPreview();
+  }
+
+  async function save() {
+    const keys = dirtyKeys();
+    if (!keys.length) return;
+    const values = Object.fromEntries(keys.map((k) => [k, form[k]]));
+    const data = await post('/api/settings', { values });
+    if (!data.ok) {
+      for (const [k, msg] of Object.entries(data.errors || {})) {
+        const n = $(`.field[data-key="${k}"] .err`);
+        if (n) n.textContent = msg;
+      }
+      flash('Проверьте поля, отмеченные красным', 'bad');
+      return;
+    }
+    for (const k of keys) {
+      if (byKey[k].type === 'secret') { secrets[k] = true; server[k] = ''; form[k] = ''; }
+      else server[k] = form[k];
+    }
+    renderForms();
+    updateSaveBar();
+    flash('Сохранено');
+    if (data.restart_needed) flash('Часть настроек применится после перезапуска программы', 'warn');
+    (data.warnings || []).forEach((w) => flash(w, 'warn'));
+  }
+  $('#save').addEventListener('click', save);
+  $('#reset').addEventListener('click', () => { form = { ...server }; renderForms(); updateSaveBar(); sendPreview(); });
+
+  /* ---------- предпросмотр оверлея ---------- */
+  function sendPreview() {
+    const frame = $('#preview');
+    if (!frame.contentWindow || !fields.length) return;
+    const style = {};
+    for (const k of Object.keys(form)) if (k.startsWith('OV_')) style[k.slice(3).toLowerCase()] = form[k];
+    frame.contentWindow.postMessage({ type: 'style', style }, location.origin);
+  }
+  $('#preview').addEventListener('load', sendPreview);
+  $('#obsUrl').textContent = location.origin + '/';
+  $('#copyUrl').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.origin + '/'); flash('Адрес скопирован'); }
+    catch { flash('Не удалось скопировать — выделите адрес вручную', 'warn'); }
+  });
+  $('#testToast').addEventListener('click', () => post('/api/test-toast'));
+  $('#logout').addEventListener('click', async () => {
+    if (!confirm('Выйти из Twitch? Новый вход потребуется после перезапуска программы.')) return;
+    await post('/api/twitch-logout');
+    flash('Вход сброшен. Перезапустите программу.', 'warn');
+  });
+
+  /* ---------- чёрный список ---------- */
+  const miniBtn = (text, title, fn) => {
+    const b = h('button', { class: 'mini', title, 'aria-label': title }, text);
+    b.addEventListener('click', fn);
+    return b;
+  };
+  const report = (r) => flash(r.message, r.done === false ? 'warn' : 'ok');
+  const blockUser = async (name) => report(await post('/api/block-user', { name }));
+  const blockTrack = async (t) => report(await post('/api/block-track', { id: t.id, title: t.title, artists: t.artists }));
+
+  let blocklist = { users: [], tracks: [] };
+  function renderBlocklist() {
+    $('#blUsersEmpty').hidden = blocklist.users.length > 0;
+    $('#blUsers').replaceChildren(...blocklist.users.map((u) => h('li', {},
+      h('span', { class: 'grow' }, u),
+      miniBtn('Разблокировать', 'Разблокировать зрителя ' + u, async () => report(await post('/api/unblock-user', { name: u }))))));
+    $('#blTracksEmpty').hidden = blocklist.tracks.length > 0;
+    $('#blTracks').replaceChildren(...blocklist.tracks.map((t) => h('li', {},
+      h('span', { class: 'grow' }, (t.artists ? t.artists + ' — ' : '') + (t.title || 'Трек ' + t.id)),
+      miniBtn('Разблокировать', 'Разблокировать трек ' + (t.title || t.id), async () => report(await post('/api/unblock-track', { id: t.id }))))));
+  }
+  async function loadBlocklist() { blocklist = await (await fetch('/api/blocklist')).json(); renderBlocklist(); }
+
+  $('#blUserForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = $('#blUserInput').value.trim();
+    if (!v) return;
+    $('#blUserInput').value = '';
+    await blockUser(v);
+  });
+  $('#blTrackForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = $('#blTrackInput').value.trim();
+    if (!v) return;
+    $('#blTrackInput').value = '';
+    report(await post('/api/block-track', { query: v }));
+  });
+  $('#blockNowTrack').addEventListener('click', () => state && state.playing && blockTrack(state.playing));
+  $('#blockNowUser').addEventListener('click', () => state && state.playing && blockUser(state.playing.login || state.playing.user));
+
+  $('#ytCheck').addEventListener('click', async () => {
+    $('#ytResult').textContent = 'Проверяю…';
+    const r = await post('/api/youtube-check');
+    $('#ytResult').textContent = r.message;
+    report(r);
+  });
+  $('#relogin').addEventListener('click', async () => report(await post('/api/twitch-relogin')));
+  $('#chatTest').addEventListener('click', async () => report(await post('/api/chat-test')));
+
+  /* ---------- плеер ---------- */
+  const TW = { off: ['', 'Twitch: не используется'], waiting: ['', 'Twitch: ждёт настроек'],
+    connecting: ['warn', 'Twitch: подключение…'], connected: ['ok', 'Twitch: подключён'],
+    reconnecting: ['warn', 'Twitch: переподключение…'], error: ['bad', 'Twitch: ошибка'] };
+  const YM = { off: ['', 'Яндекс Музыка: не подключена'], waiting: ['', 'Яндекс Музыка: ждёт настроек'],
+    ok: ['ok', 'Яндекс Музыка: подключена'], error: ['bad', 'Яндекс Музыка: ошибка'] };
+
+  let state = null, stateAt = 0;
+  const chip = (kind, text) => h('span', { class: 'chip ' + kind }, h('i'), text);
+
+  function renderState() {
+    const s = state, st = s.status || {};
+    const chips = [chip(...(TW[st.twitch] || TW.off)), chip(...(YM[st.yandex] || YM.off))];
+    if (st.reward) chips.push(chip('', 'Награда: ' + st.reward));
+    $('#chips').replaceChildren(...chips);
+    const detail = [st.twitch_error, st.yandex_error].filter(Boolean).join(' · ');
+    $('#detail').hidden = !detail;
+    $('#detail').textContent = detail;
+
+    const p = s.playing;
+    $('#nowTitle').textContent = p ? p.title : 'Ничего не играет';
+    $('#nowArtists').textContent = p ? p.artists : '';
+    $('#nowBy').textContent = p ? 'Заказал ' + p.user : '';
+    $('#nowCover').src = p && p.cover ? p.cover : 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+    $('#pause').textContent = s.paused ? 'Продолжить' : 'Пауза';
+    $('#pause').disabled = !p; $('#skip').disabled = !p;
+    $('#blockNowTrack').disabled = !p; $('#blockNowUser').disabled = !p;
+    if (document.activeElement !== $('#vol')) { $('#vol').value = s.volume; $('#volv').textContent = s.volume; }
+
+    $('#queueEmpty').hidden = s.queue.length > 0;
+    $('#queue').replaceChildren(...s.queue.map((t, i) => h('li', {},
+      h('span', { class: 'grow' }, t.artists + ' — ' + t.title, ' ', h('span', { class: 'muted' }, t.user + (t.source === 'youtube' ? ' · YouTube' : ''))),
+      miniBtn('Блок. трек', 'Заблокировать трек: ' + t.title, () => blockTrack(t)),
+      miniBtn('Блок. зрителя', 'Заблокировать зрителя ' + t.user, () => blockUser(t.login || t.user)),
+      miniBtn('✕', 'Убрать из очереди: ' + t.title, () => post('/api/remove', { index: i })))));
+  }
+
+  function tick() {
+    const p = state && state.playing;
+    if (p && p.duration_ms) {
+      const pos = Math.min(p.duration_ms, state.position_ms + (state.paused ? 0 : performance.now() - stateAt));
+      $('#nowBar div').style.width = (pos / p.duration_ms) * 100 + '%';
+    } else $('#nowBar div').style.width = '0';
+    requestAnimationFrame(tick);
+  }
+
+  function addLog(text, who) {
+    const t = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const li = h('li', {}, h('span', { class: 'grow' }, h('time', {}, t), text));
+    if (who && who !== 'Тест') li.append(miniBtn('Блок. зрителя', 'Заблокировать зрителя ' + who, () => blockUser(who)));
+    $('#log').prepend(li);
+    while ($('#log').children.length > 12) $('#log').lastChild.remove();
+    $('#logEmpty').hidden = true;
+  }
+
+  $('#skip').addEventListener('click', () => post('/api/skip'));
+  $('#pause').addEventListener('click', () => post('/api/pause'));
+  $('#clear').addEventListener('click', () => post('/api/clear'));
+  $('#vol').addEventListener('input', (e) => { $('#volv').textContent = e.target.value; post('/api/volume', { value: +e.target.value }); });
+  $('#vol').addEventListener('change', (e) => post('/api/volume', { value: +e.target.value, save: true }));
+  $('#testForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = $('#testQuery').value.trim();
+    if (!q) return;
+    $('#testQuery').value = '';
+    const r = await post('/api/request', { query: q });
+    addLog('Тест: ' + r.message);
+  });
+
+  function connectWS() {
+    const ws = new WebSocket('ws://' + location.host + '/ws');
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'state') { state = m; stateAt = performance.now(); renderState(); }
+      else if (m.type === 'added') addLog(`${m.user} заказал: ${m.artists} — ${m.title}`, m.login || m.user);
+      else if (m.type === 'rejected') addLog(`${m.user}: отказ — ${m.reason}`, m.login || m.user);
+      else if (m.type === 'blocklist') loadBlocklist();
+      else if (m.type === 'error') { addLog(m.message); flash(m.message, 'bad'); }
+    };
+    ws.onclose = () => setTimeout(connectWS, 2000);
+  }
+
+  loadSettings();
+  loadBlocklist();
+  connectWS();
+  tick();
+  showTab(location.hash.slice(1));
+</script>
+</body>
+</html>

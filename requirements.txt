@@ -1,0 +1,8 @@
+aiohttp>=3.9
+aiofiles>=23.0
+yandex-music>=2.2.0
+pygame>=2.5.0
+python-dotenv>=1.0.0
+yt-dlp[default]>=2025.11.12
+imageio-ffmpeg>=0.5
+certifi>=2024.2.2

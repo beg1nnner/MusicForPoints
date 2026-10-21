@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Сейчас играет</title>
+<style>
+  :root {
+    --ink: #15131c;
+    --text: #f3f1f8;
+    --signal: #8fa8ff;
+    --muted: color-mix(in srgb, var(--text) 62%, transparent);
+    --reject: #ff9a9a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+  }
+  #wrap {
+    position: absolute;
+    left: 16px; bottom: 16px;
+    width: 440px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  #toast {
+    align-self: flex-start;
+    max-width: 100%;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--ink);
+    font-size: 15px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0; transform: translateY(6px);
+    transition: opacity .25s, transform .25s;
+  }
+  #toast.show { opacity: 1; transform: none; }
+  #toast.bad { color: var(--reject); }
+
+  #card {
+    position: relative;
+    display: flex; gap: 14px; align-items: center;
+    padding: 12px 16px 16px 12px;
+    border-radius: var(--radius);
+    background: var(--ink);
+    overflow: hidden;
+    opacity: 0; transform: translateX(-24px);
+    transition: opacity .4s, transform .4s;
+  }
+  #card.show { opacity: 1; transform: none; }
+
+  #cover {
+    flex: none;
+    width: 92px; height: 92px;
+    border-radius: calc(var(--radius) * .6);
+    object-fit: cover;
+    background: rgba(128, 128, 128, .25);
+  }
+  #info { min-width: 0; flex: 1; }
+  #title {
+    font-size: 21px; font-weight: 650; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #artists {
+    margin-top: 2px;
+    font-size: 16px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #meta {
+    margin-top: 8px;
+    display: flex; justify-content: space-between; gap: 12px;
+    font-size: 13px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  #by { color: var(--signal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #time { flex: none; margin-left: auto; }
+  #track { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: color-mix(in srgb, var(--text) 12%, transparent); }
+  #bar { height: 100%; width: 0; background: var(--signal); }
+
+  #queueBox {
+    display: none;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    background: var(--ink);
+  }
+  #queueBox.show { display: block; }
+  #queueBox h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  #queue { list-style: none; font-size: 15px; }
+  #queue li { padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #queue .who { color: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) { #card, #toast { transition: none; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="toast"></div>
+  <div id="card">
+    <img id="cover" alt="">
+    <div id="info">
+      <div id="title"></div>
+      <div id="artists"></div>
+      <div id="meta"><span id="by"></span><span id="time"></span></div>
+    </div>
+    <div id="track"><div id="bar"></div></div>
+  </div>
+  <div id="queueBox">
+    <h2>Дальше</h2>
+    <ul id="queue"></ul>
+  </div>
+</div>
+
+<script>
+  // Внешний вид задаётся в панели настроек (/control). В адресе можно переопределить:
+  //   ?queue=5  — сколько треков очереди показывать
+  const params = new URLSearchParams(location.search);
+  const PREVIEW = params.get('preview') === '1';   // режим предпросмотра внутри панели
+  const $ = (id) => document.getElementById(id);
+
+  const FONTS = {
+    segoe: '"Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif',
+    arial: 'Arial, "Helvetica Neue", sans-serif',
+    verdana: 'Verdana, Geneva, sans-serif',
+    trebuchet: '"Trebuchet MS", Tahoma, sans-serif',
+    georgia: 'Georgia, "Times New Roman", serif',
+    consolas: 'Consolas, "Courier New", monospace',
+  };
+  const PLACEHOLDER = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 92 92"><rect width="92" height="92" fill="#2a2735"/>' +
+    '<circle cx="46" cy="46" r="27" fill="#15131c"/><circle cx="46" cy="46" r="8" fill="#8fa8ff"/></svg>');
+
+  let style = {
+    accent: '#8fa8ff', bg: '#15131c', text: '#f3f1f8', bg_opacity: 100,
+    position: 'bottom-left', width: 440, scale: 100, radius: 14, font: 'segoe',
+    queue: 3, show_cover: true, show_user: true, show_time: true, show_toast: true,
+  };
+  let st = null, stAt = 0, toastTimer = null;
+
+  const fmt = (ms) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  };
+  const rgba = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+  const queueShown = () => params.has('queue') ? parseInt(params.get('queue'), 10) : style.queue;
+
+  function applyStyle(s) {
+    style = { ...style, ...s };
+    const root = document.documentElement.style;
+    root.setProperty('--ink', rgba(style.bg, style.bg_opacity / 100));
+    root.setProperty('--text', style.text);
+    root.setProperty('--signal', style.accent);
+    root.setProperty('--radius', style.radius + 'px');
+    document.body.style.fontFamily = FONTS[style.font] || FONTS.segoe;
+
+    const w = $('wrap').style;
+    const top = style.position.startsWith('top'), right = style.position.endsWith('right');
+    w.width = style.width + 'px';
+    w.zoom = style.scale / 100;
+    w.top = top ? '16px' : 'auto';
+    w.bottom = top ? 'auto' : '16px';
+    w.left = right ? 'auto' : '16px';
+    w.right = right ? '16px' : 'auto';
+    $('toast').style.alignSelf = right ? 'flex-end' : 'flex-start';
+
+    $('cover').style.display = style.show_cover ? '' : 'none';
+    $('by').style.display = style.show_user ? '' : 'none';
+    $('time').style.display = style.show_time ? '' : 'none';
+    render();
+  }
+
+  function render() {
+    const p = st && st.playing;
+    $('card').classList.toggle('show', !!p);
+    if (p) {
+      $('title').textContent = p.title;
+      $('artists').textContent = p.artists;
+      $('by').textContent = 'Заказал ' + p.user;
+      const src = p.cover || PLACEHOLDER;
+      if ($('cover').dataset.src !== src) { $('cover').dataset.src = src; $('cover').src = src; }
+    }
+    const n = queueShown();
+    const items = st && n > 0 ? st.queue.slice(0, n) : [];
+    $('queueBox').classList.toggle('show', items.length > 0);
+    const list = $('queue');
+    list.replaceChildren();
+    for (const t of items) {
+      const li = document.createElement('li');
+      li.append(t.artists + ' — ' + t.title + ' ');
+      if (style.show_user) {
+        const who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = t.user;
+        li.append(who);
+      }
+      list.append(li);
+    }
+  }
+
+  function tick() {
+    if (st && st.playing && st.playing.duration_ms) {
+      const d = st.playing.duration_ms;
+      let pos = st.position_ms + (st.paused ? 0 : performance.now() - stAt);
+      pos = PREVIEW ? pos % d : Math.min(d, pos);
+      $('bar').style.width = (pos / d) * 100 + '%';
+      $('time').textContent = fmt(pos) + ' / ' + fmt(d);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function toast(text, bad) {
+    if (!style.show_toast) return;
+    const el = $('toast');
+    el.textContent = text;
+    el.classList.toggle('bad', !!bad);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 5000);
+  }
+
+  function connect() {
+    const ws = new WebSocket('ws://' + location.host + '/ws');
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'state') { st = m; stAt = performance.now(); applyStyle(m.style || {}); }
+      else if (m.type === 'added') toast(m.user + ' заказал: ' + m.artists + ' — ' + m.title);
+      else if (m.type === 'rejected' && !m.quiet) toast(m.user + ': ' + m.reason, true);
+    };
+    ws.onclose = () => setTimeout(connect, 2000);
+  }
+
+  applyStyle({});
+  tick();
+  if (PREVIEW) {
+    st = {
+      playing: { title: 'Название трека', artists: 'Исполнитель', user: 'Зритель', cover: '', duration_ms: 215000 },
+      position_ms: 62000, paused: false,
+      queue: [
+        { title: 'Второй трек', artists: 'Группа', user: 'Аня' },
+        { title: 'Третий трек', artists: 'Певец', user: 'Макс' },
+        { title: 'Четвёртый трек', artists: 'Дуэт', user: 'Ира' },
+      ],
+    };
+    stAt = performance.now();
+    render();
+    window.addEventListener('message', (e) => {
+      if (e.origin === location.origin && e.data && e.data.type === 'style') applyStyle(e.data.style);
+    });
+    setInterval(() => toast('Зритель заказал: Исполнитель — Название'), 9000);
+    setTimeout(() => toast('Зритель заказал: Исполнитель — Название'), 1500);
+  } else {
+    connect();
+  }
+</script>
+</body>
+</html>
